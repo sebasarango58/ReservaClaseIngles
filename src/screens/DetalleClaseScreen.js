@@ -1,79 +1,104 @@
-import React,{useState, useMemo} from 'react';
-import { View, Text, StyleSheet, ScrollView, Alert, Image} from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import React, { useState } from 'react';
+import { View, Text, Image, StyleSheet, Pressable, Alert, ScrollView } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-
-import useResponsive from "../hooks/useResponsive";
-import { colors, spacing, radius,typography, sombra } from "../theme";
 import { formatearPrecio } from '../data/clases';
-import EtiquetaNivel from '../components/EtiquetaNivel';
+import { colors, spacing, typography } from '../theme';
+import { useClases } from '../context/ClasesContext';
+import NivelChip from '../components/NivelChip';
 
+export default function DetalleClaseScreen({ route, navigation }) {
+  const insets = useSafeAreaInsets();
+  const { clase: claseParam } = route.params || {};
+  const { clases, reservarClase, cancelarClase, reservadas } = useClases();
+  const [horarioSeleccionado, setHorarioSeleccionado] = useState(null);
 
-export default function DetalleClase( { route, navigation }){
-    const insets = useSafeAreaInsets();
-    const { clase } = route.params;
-    const {paddingHorizontal, esTablet} = useResponsive();
+  const clase = clases.find((c) => c.id === (claseParam?.id ?? claseParam));
+  if (!clase) return (
+    <View style={[styles.container, { paddingTop: insets.top + spacing.sm }]}>
+      <Text style={typography.titulo}>Clase no encontrada</Text>
+    </View>
+  );
 
-    return(
-        <View>
-            <ScrollView
-            contentContainerStyle={{paddingBottom: 120}}
-            showsHorizontalScrollIndicator = {False}
-            >
-                <Image source={{uri: clase.imagen}}
-                    resizeMode="cover"
-                    style ={[styles.portada, {height: esTablet ? 300:220}]}
+  const estaReservada = reservadas.has(clase.id);
+  const horarioReservado = reservadas.get(clase.id);
 
-                />
+  function handleReservar() {
+    if (clase.cupos <= 0) {
+      Alert.alert('Sin cupos', 'Lo sentimos, no hay cupos disponibles.');
+      return;
+    }
+    if (!horarioSeleccionado) {
+      Alert.alert('Elige un horario', 'Selecciona uno de los horarios disponibles para agendar.');
+      return;
+    }
+    reservarClase(clase.id, horarioSeleccionado);
+    Alert.alert('Reserva confirmada', `Has reservado la clase para el horario: ${horarioSeleccionado}.`);
+  }
 
-               
-            </ScrollView>
+  function handleCancelar() {
+    if (!estaReservada) {
+      Alert.alert('No reservada', 'No tienes una reserva activa para esta clase.');
+      return;
+    }
+    cancelarClase(clase.id);
+    setHorarioSeleccionado(null);
+    Alert.alert('Reserva cancelada', 'Se ha liberado el cupo de la clase.');
+  }
+
+  return (
+    <View style={[styles.container, { paddingTop: insets.top + spacing.sm }]}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: insets.bottom + spacing.lg }}
+      >
+        <Image source={{ uri: clase.imagen }} style={styles.image} />
+        <Text style={styles.title}>{clase.titulo}</Text>
+        <Text style={styles.subtitle}>{clase.nivel} • {clase.modalidad} • {clase.duracion} min</Text>
+        <Text style={styles.price}>{formatearPrecio(clase.precio)}</Text>
+        <Text style={styles.description}>{clase.descripcion}</Text>
+
+        <Text style={styles.cupos}>Cupos disponibles: {clase.cupos}</Text>
+        {estaReservada && (
+          <Text style={styles.reservaInfo}>Reservada para: {horarioReservado}</Text>
+        )}
+
+        <Text style={styles.sectionTitle}>Horarios disponibles</Text>
+        <View style={styles.horarios}>
+          {clase.horarios?.map((horario) => (
+            <NivelChip
+              key={horario}
+              etiqueta={horario}
+              activo={horarioSeleccionado === horario}
+              onPress={() => setHorarioSeleccionado(horario)}
+            />
+          ))}
         </View>
 
-    );
-
+        <View style={styles.actions}>
+          <Pressable style={[styles.button, { backgroundColor: colors.primario }]} onPress={handleReservar}>
+            <Text style={styles.buttonText}>Reservar</Text>
+          </Pressable>
+          <Pressable style={[styles.button, { backgroundColor: colors.peligro }]} onPress={handleCancelar}>
+            <Text style={styles.buttonText}>Cancelar</Text>
+          </Pressable>
+        </View>
+      </ScrollView>
+    </View>
+  );
 }
 
-
-
-
-
-
 const styles = StyleSheet.create({
-  pantalla: { flex: 1, backgroundColor: colors.fondo },
-  portada: { width: '100%', backgroundColor: colors.primarioSuave },
-  datos: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    backgroundColor: colors.superficie,
-    borderRadius: radius.lg,
-    paddingVertical: spacing.lg,
-  },
-  dato: { alignItems: 'center', gap: 2 },
-  datoValor: { fontSize: 16, fontWeight: '800', color: colors.texto },
-  profesor: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    backgroundColor: colors.superficie,
-    borderRadius: radius.lg,
-    padding: spacing.lg,
-  },
-  avatar: { width: 48, height: 48, borderRadius: 24, backgroundColor: colors.borde },
-  profesorNombre: { fontSize: 15, fontWeight: '700', color: colors.texto },
-  descripcion: { ...typography.cuerpo, color: colors.textoSuave, lineHeight: 22, marginTop: spacing.sm },
-  barra: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.superficie,
-    borderTopWidth: 1,
-    borderTopColor: colors.borde,
-    paddingVertical: spacing.lg,
-    paddingTop: spacing.lg
-  },
-  precio: { fontSize: 18, fontWeight: '800', color: colors.primario },
+  container: { flex: 1, backgroundColor: colors.fondo, paddingHorizontal: spacing.lg },
+  image: { width: '100%', height: 200, borderRadius: 8, marginBottom: spacing.md },
+  title: { fontSize: 20, fontWeight: '700', color: colors.texto, marginBottom: spacing.xs },
+  subtitle: { color: colors.textoSuave, marginBottom: spacing.sm },
+  price: { color: colors.primario, fontWeight: '700', marginBottom: spacing.sm },
+  description: { color: colors.texto, marginBottom: spacing.sm },
+  cupos: { fontWeight: '700', marginVertical: spacing.sm },
+  reservaInfo: { color: colors.exito, fontWeight: '600', marginBottom: spacing.sm },
+  sectionTitle: { fontSize: 15, fontWeight: '700', color: colors.texto, marginBottom: spacing.sm },
+  horarios: { flexDirection: 'row', flexWrap: 'wrap', rowGap: spacing.sm, marginBottom: spacing.lg },
+  actions: { flexDirection: 'row', gap: spacing.md, justifyContent: 'space-between' },
+  button: { flex: 1, padding: 12, borderRadius: 8, alignItems: 'center' },
+  buttonText: { color: '#fff', fontWeight: '700' },
 });

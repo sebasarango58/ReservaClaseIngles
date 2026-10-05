@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
-import Ionicons from '@react-native-vector-icons/ionicons';
+import Icon from 'react-native-vector-icons/Ionicons'
 import { colors, radius, spacing, typography } from '../theme';
 
 export default function EstadoVacio({ icono, titulo, mensaje, onAction }) {

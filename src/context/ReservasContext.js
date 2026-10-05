@@ -30,7 +30,7 @@ export function ReservaProvider({children}){
     useEffect(()=>{
         if(cargando) return;
         AsyncStorage.setItem(CLAVE_RESERVAS, JSON.stringify(reservas)).catch((error)=>
-            console.log('error guardando reservas:', error)
+            console.log('Error guardando reservas:', error)
 
     );
     },[reservas, cargando]);
@@ -53,13 +53,13 @@ export function ReservaProvider({children}){
             return[nueva, ...previas]
         });//setReservas
         return resultado
-    },[]);//cierre del callBack
+    },[]);//Cierre del callBack
 
 const valor = useMemo(
     () => ({cargando, agregarReserva, reservas}),
     [cargando, agregarReserva, reservas]
 )
         
-return <ReservaContext.Provider value>{children}</ReservaContext.Provider>
+return <ReservaContext.Provider value={valor}> {children}</ReservaContext.Provider>
      
  }// Esta es la llave que cierra para la funcion

@@ -1,87 +1,131 @@
-import React, { useState } from 'react';
-import { View, Text, Image, StyleSheet, Pressable, Alert, ScrollView } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { formatearPrecio } from '../data/clases';
-import { colors, spacing, typography } from '../theme';
-import { useClases } from '../context/ClasesContext';
+import { colors, spacing, typography, radius } from '../theme';
+import useReserva from '../hooks/useReservas';
 import NivelChip from '../components/NivelChip';
+import { CLASES } from '../data/clases';
 
+// Pantalla de detalle de una clase y selección de horario.
 export default function DetalleClaseScreen({ route, navigation }) {
   const insets = useSafeAreaInsets();
   const { clase: claseParam } = route.params || {};
-  const { clases, reservarClase, cancelarClase, reservadas } = useClases();
+  const { reservas, creditos, agregarReserva, cancelarReserva, estaReservada, cantidadEnHorario } = useReserva();
   const [horarioSeleccionado, setHorarioSeleccionado] = useState(null);
 
-  const clase = clases.find((c) => c.id === (claseParam?.id ?? claseParam));
-  if (!clase) return (
-    <View style={[styles.container, { paddingTop: insets.top + spacing.sm }]}>
-      <Text style={typography.titulo}>Clase no encontrada</Text>
-    </View>
+  // Buscamos la clase original en los datos del proyecto.
+  const clase = useMemo(
+    () => CLASES.find((item) => item.id === (claseParam?.id ?? claseParam)),
+    [claseParam]
   );
 
-  const estaReservada = reservadas.has(clase.id);
-  const horarioReservado = reservadas.get(clase.id);
-
-  function handleReservar() {
-    if (clase.cupos <= 0) {
-      Alert.alert('Sin cupos', 'Lo sentimos, no hay cupos disponibles.');
-      return;
-    }
-    if (!horarioSeleccionado) {
-      Alert.alert('Elige un horario', 'Selecciona uno de los horarios disponibles para agendar.');
-      return;
-    }
-    reservarClase(clase.id, horarioSeleccionado);
-    Alert.alert('Reserva confirmada', `Has reservado la clase para el horario: ${horarioSeleccionado}.`);
+  if (!clase) {
+    return (
+      <View style={styles.container}>
+        <Text style={typography.titulo}>Clase no encontrada</Text>
+      </View>
+    );
   }
 
-  function handleCancelar() {
-    if (!estaReservada) {
-      Alert.alert('No reservada', 'No tienes una reserva activa para esta clase.');
+  // Cantidad de reservas de esta misma clase.
+  const reservasDeClase = reservas.filter((reserva) => reserva.claseId === clase.id).length;
+  const cuposDisponibles = Math.max(0, clase.cupos - reservasDeClase);
+
+  function handleReservar() {
+    if (!horarioSeleccionado) {
+      Alert.alert('Elige un horario', 'Selecciona uno de los horarios disponibles.');
       return;
     }
-    cancelarClase(clase.id);
+
+    if (creditos <= 0) {
+      Alert.alert('Sin créditos', 'No tienes créditos disponibles para realizar esta reserva.');
+      return;
+    }
+
+    if (cuposDisponibles <= 0) {
+      Alert.alert('Sin cupos', 'Esta clase ya no tiene cupos disponibles.');
+      return;
+    }
+
+    const resultado = agregarReserva(clase, horarioSeleccionado);
+
+    if (!resultado.ok) {
+      Alert.alert('No se puede reservar', resultado.mensaje);
+      return;
+    }
+
+    Alert.alert('Reserva confirmada', `Reservaste "${clase.titulo}" para ${horarioSeleccionado}.`);
+  }
+
+  function handleCancelarHorario() {
+    const reserva = reservas.find(
+      (item) => item.claseId === clase.id && item.horario === horarioSeleccionado
+    );
+
+    if (!reserva) {
+      Alert.alert('Sin reserva', 'No tienes una reserva para ese horario.');
+      return;
+    }
+
+    cancelarReserva(reserva.id);
     setHorarioSeleccionado(null);
-    Alert.alert('Reserva cancelada', 'Se ha liberado el cupo de la clase.');
+    Alert.alert('Reserva cancelada', 'El crédito fue devuelto.');
   }
 
   return (
     <View style={[styles.container, { paddingTop: insets.top + spacing.sm }]}>
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: insets.bottom + spacing.lg }}
-      >
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xxl }}>
         <Image source={{ uri: clase.imagen }} style={styles.image} />
-        <Text style={styles.title}>{clase.titulo}</Text>
-        <Text style={styles.subtitle}>{clase.nivel} • {clase.modalidad} • {clase.duracion} min</Text>
+
+        <View style={styles.encabezadoFila}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.title}>{clase.titulo}</Text>
+            <Text style={styles.subtitle}>{clase.nivel} · {clase.modalidad} · {clase.duracion} min</Text>
+          </View>
+          <Ionicons name="school-outline" size={28} color={colors.primario} />
+        </View>
+
         <Text style={styles.price}>{formatearPrecio(clase.precio)}</Text>
         <Text style={styles.description}>{clase.descripcion}</Text>
 
-        <Text style={styles.cupos}>Cupos disponibles: {clase.cupos}</Text>
-        {estaReservada && (
-          <Text style={styles.reservaInfo}>Reservada para: {horarioReservado}</Text>
-        )}
+        <View style={styles.infoBox}>
+          <Text style={styles.infoText}>Profesor: {clase.profesor.nombre}</Text>
+          <Text style={styles.infoText}>Cupos disponibles: {cuposDisponibles}</Text>
+          <Text style={styles.infoText}>Tu saldo: {creditos} créditos</Text>
+        </View>
 
         <Text style={styles.sectionTitle}>Horarios disponibles</Text>
+        <Text style={styles.helper}>No se crean horarios nuevos. Solo puedes elegir los horarios existentes.</Text>
+
         <View style={styles.horarios}>
-          {clase.horarios?.map((horario) => (
-            <NivelChip
-              key={horario}
-              etiqueta={horario}
-              activo={horarioSeleccionado === horario}
-              onPress={() => setHorarioSeleccionado(horario)}
-            />
-          ))}
+          {clase.horarios?.map((horario) => {
+            const reservada = estaReservada(clase.id, horario);
+            const limiteHorario = cantidadEnHorario(horario) >= 2 && !reservada;
+
+            return (
+              <NivelChip
+                key={horario}
+                etiqueta={reservada ? `${horario} · Reservada` : horario}
+                activo={horarioSeleccionado === horario}
+                onPress={() => !limiteHorario && setHorarioSeleccionado(horario)}
+              />
+            );
+          })}
         </View>
 
-        <View style={styles.actions}>
-          <Pressable style={[styles.button, { backgroundColor: colors.primario }]} onPress={handleReservar}>
-            <Text style={styles.buttonText}>Reservar</Text>
+        {horarioSeleccionado && estaReservada(clase.id, horarioSeleccionado) ? (
+          <Pressable style={[styles.button, styles.cancelButton]} onPress={handleCancelarHorario}>
+            <Ionicons name="close-circle-outline" size={19} color="#FFFFFF" />
+            <Text style={styles.buttonText}>Cancelar reserva</Text>
           </Pressable>
-          <Pressable style={[styles.button, { backgroundColor: colors.peligro }]} onPress={handleCancelar}>
-            <Text style={styles.buttonText}>Cancelar</Text>
+        ) : (
+          <Pressable style={[styles.button, (creditos <= 0 || cuposDisponibles <= 0) && styles.buttonDisabled]} onPress={handleReservar}>
+            <Ionicons name="calendar-outline" size={19} color="#FFFFFF" />
+            <Text style={styles.buttonText}>Reservar clase · 1 crédito</Text>
           </Pressable>
-        </View>
+        )}
       </ScrollView>
     </View>
   );
@@ -89,16 +133,19 @@ export default function DetalleClaseScreen({ route, navigation }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.fondo, paddingHorizontal: spacing.lg },
-  image: { width: '100%', height: 200, borderRadius: 8, marginBottom: spacing.md },
-  title: { fontSize: 20, fontWeight: '700', color: colors.texto, marginBottom: spacing.xs },
-  subtitle: { color: colors.textoSuave, marginBottom: spacing.sm },
-  price: { color: colors.primario, fontWeight: '700', marginBottom: spacing.sm },
-  description: { color: colors.texto, marginBottom: spacing.sm },
-  cupos: { fontWeight: '700', marginVertical: spacing.sm },
-  reservaInfo: { color: colors.exito, fontWeight: '600', marginBottom: spacing.sm },
-  sectionTitle: { fontSize: 15, fontWeight: '700', color: colors.texto, marginBottom: spacing.sm },
-  horarios: { flexDirection: 'row', flexWrap: 'wrap', rowGap: spacing.sm, marginBottom: spacing.lg },
-  actions: { flexDirection: 'row', gap: spacing.md, justifyContent: 'space-between' },
-  button: { flex: 1, padding: 12, borderRadius: 8, alignItems: 'center' },
-  buttonText: { color: '#fff', fontWeight: '700' },
+  image: { width: '100%', height: 210, borderRadius: radius.lg, marginBottom: spacing.md },
+  encabezadoFila: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  title: { fontSize: 22, fontWeight: '800', color: colors.texto, marginBottom: spacing.xs },
+  subtitle: { color: colors.textoSuave },
+  price: { color: colors.primario, fontWeight: '800', fontSize: 16, marginVertical: spacing.md },
+  description: { color: colors.texto, lineHeight: 21, marginBottom: spacing.md },
+  infoBox: { backgroundColor: colors.superficie, borderRadius: radius.md, padding: spacing.md, gap: spacing.xs, marginBottom: spacing.lg },
+  infoText: { color: colors.textoSuave },
+  sectionTitle: { fontSize: 16, fontWeight: '800', color: colors.texto, marginBottom: spacing.xs },
+  helper: { fontSize: 12, color: colors.textoSuave, marginBottom: spacing.md },
+  horarios: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.lg },
+  button: { minHeight: 48, borderRadius: radius.md, backgroundColor: colors.primario, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: spacing.sm, paddingHorizontal: spacing.md },
+  cancelButton: { backgroundColor: colors.peligro },
+  buttonDisabled: { opacity: 0.45 },
+  buttonText: { color: '#FFFFFF', fontWeight: '800' },
 });

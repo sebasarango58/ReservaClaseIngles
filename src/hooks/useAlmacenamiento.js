@@ -1,36 +1,37 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-export default function useAlmacenamiento(clave,valorInicial){
-    const [valor, setValor] = useState(valorInicial);
-    const [listo, setlisto] = useState(false);
+// Hook reutilizable para guardar un valor en AsyncStorage.
+export default function useAlmacenamiento(clave, valorInicial) {
+  const [valor, setValor] = useState(valorInicial);
+  const [listo, setListo] = useState(false);
 
-    useEffect(()=> {
-        let activo = true; //esto es una bandera para saber si estoy guardando el componente o subiendo el componente
+  useEffect(() => {
+    let activo = true;
 
-        AsyncStorage.getItem(clave)
-        .then(()=>{
-            if(activo && guardando !== null) setValor(JSON.parse(guardando));
-
-        })
-        .catch((error) => console.log ('Error leyendo'+ clave,error))
-        .finally(()=> activo && setlisto(true));
-
-        return () => {
-            activo = false;
+    AsyncStorage.getItem(clave)
+      .then((guardado) => {
+        if (activo && guardado !== null) {
+          setValor(JSON.parse(guardado));
         }
-    },[clave]);   
+      })
+      .catch((error) => console.log('Error leyendo ' + clave, error))
+      .finally(() => activo && setListo(true));
 
-    const actualizar = useCallback( 
-        async(nuevoValor) => {
-            setValor( nuevoValor);
-            try {
-                await AsyncStorage.setItem (clave, JSON.stringify(nuevoValor));
-                
-            } catch (error) {
-                console.log('error guardado' + clave, error )
-                
-            }
-        }, [clave]
-     );
-};
+    return () => {
+      activo = false;
+    };
+  }, [clave]);
+
+  const actualizar = useCallback(async (nuevoValor) => {
+    setValor(nuevoValor);
+
+    try {
+      await AsyncStorage.setItem(clave, JSON.stringify(nuevoValor));
+    } catch (error) {
+      console.log('Error guardando ' + clave, error);
+    }
+  }, [clave]);
+
+  return { valor, actualizar, listo };
+}
